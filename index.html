@@ -216,7 +216,7 @@
         const height = 700;
 
         // Check for data in URL query parameter on load
-        window.addEventListener('DOMContentLoaded', () => {
+        function initializeGraph() {
             const urlParams = new URLSearchParams(window.location.search);
             const dataParam = urlParams.get('data');
             
@@ -234,7 +234,7 @@
             // Load example if no URL parameter
             document.getElementById('jsonInput').value = JSON.stringify(exampleGraph, null, 2);
             renderGraph();
-        });
+        }
 
         function formatJSON() {
             const input = document.getElementById('jsonInput').value;
@@ -471,6 +471,14 @@
                 ]
             }
         };
+    </script>
+    <script>
+        // Initialize on load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeGraph);
+        } else {
+            initializeGraph();
+        }
     </script>
 </body>
 </html>
