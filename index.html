@@ -1,484 +1,599 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Graph Visualizer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Level Visualizer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e22ce 100%);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
+    .nav {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      padding: 0;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
 
-        h1 {
-            color: white;
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 2em;
-        }
+    .nav-content {
+      max-width: 1600px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+    }
 
-        .controls {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-        }
+    .nav-brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e3c72;
+      padding: 18px 0;
+      margin-right: 40px;
+    }
 
-        .input-group {
-            margin-bottom: 15px;
-        }
+    .nav-links {
+      display: flex;
+      gap: 0;
+      list-style: none;
+    }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
+    .nav-links a {
+      display: block;
+      padding: 20px 24px;
+      color: #555;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+    }
 
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            resize: vertical;
-            min-height: 150px;
-            transition: border-color 0.3s;
-        }
+    .nav-links a:hover {
+      color: #1e3c72;
+      background: rgba(30, 60, 114, 0.05);
+    }
 
-        textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
+    .nav-links a.active {
+      color: #7e22ce;
+      border-bottom-color: #7e22ce;
+    }
 
-        button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 30px 20px;
+    }
 
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
+    .header {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 25px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
 
-        button:active {
-            transform: translateY(0);
-        }
+    h1 {
+      background: linear-gradient(135deg, #1e3c72 0%, #7e22ce 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 8px;
+      font-size: 28px;
+    }
 
-        .error {
-            background: #fee;
-            border: 1px solid #fcc;
-            padding: 12px;
-            border-radius: 8px;
-            color: #c33;
-            margin-top: 10px;
-            display: none;
-        }
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
 
-        #graph {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
+    .input-section {
+      margin-bottom: 18px;
+    }
 
-        .node circle {
-            cursor: pointer;
-            stroke: #fff;
-            stroke-width: 2px;
-            transition: all 0.3s;
-        }
+    label {
+      display: block;
+      margin-bottom: 10px;
+      color: #333;
+      font-weight: 600;
+      font-size: 14px;
+    }
 
-        .node circle:hover {
-            stroke-width: 4px;
-        }
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      padding: 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      resize: vertical;
+      transition: all 0.3s;
+      background: #fafafa;
+    }
 
-        .node text {
-            font-size: 12px;
-            pointer-events: none;
-            user-select: none;
-            font-weight: 600;
-        }
+    textarea:focus {
+      outline: none;
+      border-color: #7e22ce;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(126, 34, 206, 0.1);
+    }
 
-        .link {
-            stroke: #999;
-            stroke-opacity: 0.6;
-            stroke-width: 2px;
-            fill: none;
-        }
+    .button-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
 
-        .link.external {
-            stroke: #ff6b6b;
-            stroke-dasharray: 5,5;
-        }
+    button {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
 
-        .link-label {
-            font-size: 10px;
-            fill: #666;
-            pointer-events: none;
-            user-select: none;
-        }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
 
-        .arrow {
-            fill: #999;
-        }
+    button:active {
+      transform: translateY(0);
+    }
 
-        .arrow.external {
-            fill: #ff6b6b;
-        }
+    button.secondary {
+      background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+      box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+    }
 
-        .legend {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 20px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-        }
+    button.secondary:hover {
+      box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4);
+    }
 
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-        }
+    .canvas-container {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 25px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+      overflow: auto;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
 
-        .legend-line {
-            width: 40px;
-            height: 2px;
-            margin-right: 10px;
-        }
+    #canvas {
+      border: 2px solid #f0f0f0;
+      border-radius: 12px;
+      background: #fafafa;
+    }
 
-        .legend-line.internal {
-            background: #999;
-        }
+    .error {
+      background: linear-gradient(135deg, #fee 0%, #fdd 100%);
+      border: 2px solid #fcc;
+      border-radius: 10px;
+      padding: 14px;
+      color: #c33;
+      margin-top: 12px;
+      display: none;
+      font-weight: 500;
+    }
 
-        .legend-line.external {
-            background: #ff6b6b;
-            background-image: repeating-linear-gradient(90deg, #ff6b6b, #ff6b6b 5px, transparent 5px, transparent 10px);
-        }
-    </style>
+    .info {
+      color: #666;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .header,
+    .canvas-container {
+      animation: fadeIn 0.5s ease-out;
+    }
+  </style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>🔗 Graph Visualizer</h1>
-        
-        <div class="controls">
-            <div class="input-group">
-                <label for="jsonInput">Paste your Graph JSON:</label>
-                <textarea id="jsonInput" placeholder='{"nodes": {"A": {"name": "A", "edges": [{"to": "B", "name": "edge1"}]}, "B": {"name": "B", "edges": []}}, "external": {"C": [{"to": "A", "name": "external1"}]}}'></textarea>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button onclick="renderGraph()">Visualize Graph</button>
-                <button onclick="formatJSON()" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);">Format JSON</button>
-            </div>
-            <div class="error" id="error"></div>
-        </div>
+  <nav class="nav">
+    <div class="nav-content">
+      <div class="nav-brand">🎮 Game Dev Tools</div>
+      <ul class="nav-links">
+        <li><a href="/" class="active">Level Visualizer</a></li>
+        <li><a href="graph-viz.html">Graph Visualizer</a></li>
+      </ul>
+    </div>
+  </nav>
 
-        <div id="graph"></div>
+  <div class="container">
+    <div class="header">
+      <h1>🌳 Level Visualizer</h1>
+      <div class="subtitle">Visualize your game level tree structure with style</div>
 
-        <div class="legend">
-            <h3>Legend</h3>
-            <div class="legend-item">
-                <div class="legend-line internal"></div>
-                <span>Internal Edge</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-line external"></div>
-                <span>External Edge</span>
-            </div>
-        </div>
+      <div class="input-section">
+        <label for="jsonInput">Tree JSON Data:</label>
+        <textarea id="jsonInput"
+          placeholder='{"nodes": {"root": {"name": "Root", "data": {}, ...}}, "root": "root"}'></textarea>
+        <div class="info">Paste the JSON output from your tree.ToJSON() method or use ?data=base64 URL parameter</div>
+      </div>
+
+      <div class="button-group">
+        <button onclick="visualize()">✨ Visualize Tree</button>
+        <button class="secondary" onclick="formatJSON()">📝 Format JSON</button>
+      </div>
+
+      <div id="error" class="error"></div>
     </div>
 
-    <script>
-        const width = 1200;
-        const height = 700;
+    <div class="canvas-container">
+      <canvas id="canvas"></canvas>
+    </div>
+  </div>
 
-        // Check for data in URL query parameter on load
-        function initializeGraph() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const dataParam = urlParams.get('data');
-            
-            if (dataParam) {
-                try {
-                    const jsonString = atob(dataParam);
-                    document.getElementById('jsonInput').value = jsonString;
-                    renderGraph();
-                    return;
-                } catch (e) {
-                    console.error('Failed to decode URL parameter:', e);
-                }
-            }
-            
-            // Load example if no URL parameter
-            document.getElementById('jsonInput').value = JSON.stringify(exampleGraph, null, 2);
-            renderGraph();
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let tree = null;
+    let nodePositions = {};
+
+    const NODE_WIDTH = 180;
+    const NODE_HEIGHT = 90;
+    const HORIZONTAL_SPACING = 100;
+    const VERTICAL_SPACING = 140;
+    const PADDING = 80;
+
+    function showError(message) {
+      const errorDiv = document.getElementById('error');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('error').style.display = 'none';
+    }
+
+    function loadExample() {
+      const example = {
+        "nodes": {
+          "root": {
+            "name": "Tutorial",
+            "data": {"difficulty": "easy", "type": "intro"},
+            "children": [
+              {"to": "level1", "name": "Next"},
+              {"to": "bonus1", "name": "Secret"}
+            ]
+          },
+          "level1": {
+            "name": "Forest Path",
+            "data": {"difficulty": "medium", "enemies": "3"},
+            "parent": "root",
+            "children": [
+              {"to": "level2a", "name": "Main"},
+              {"to": "level2b", "name": "Alt"}
+            ]
+          },
+          "bonus1": {
+            "name": "Hidden Cave",
+            "data": {"difficulty": "hard", "reward": "sword"},
+            "parent": "root"
+          },
+          "level2a": {
+            "name": "Mountain Pass",
+            "data": {"difficulty": "hard", "boss": "true"},
+            "parent": "level1"
+          },
+          "level2b": {
+            "name": "River Valley",
+            "data": {"difficulty": "medium", "puzzle": "true"},
+            "parent": "level1"
+          }
+        },
+        "root": "root"
+      };
+
+      document.getElementById('jsonInput').value = JSON.stringify(example, null, 2);
+      visualize();
+    }
+
+    function formatJSON() {
+      const input = document.getElementById('jsonInput').value.trim();
+
+      if (!input) {
+        showError('Nothing to format');
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(input);
+        document.getElementById('jsonInput').value = JSON.stringify(parsed, null, 2);
+        hideError();
+      } catch (e) {
+        showError('Invalid JSON: ' + e.message);
+      }
+    }
+
+    function Initialize() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const dataParam = urlParams.get('data');
+
+      if (dataParam) {
+        try {
+          const decoded = atob(dataParam);
+          const parsed = JSON.parse(decoded);
+          document.getElementById('jsonInput').value = JSON.stringify(parsed, null, 2);
+          visualize();
+        } catch (e) {
+          showError('Invalid data parameter: ' + e.message);
+        }
+      } else {
+        loadExample()
+      }
+    }
+
+    function visualize() {
+      hideError();
+      const input = document.getElementById('jsonInput').value.trim();
+
+      if (!input) {
+        showError('Please paste your tree JSON data');
+        return;
+      }
+
+      try {
+        tree = JSON.parse(input);
+
+        if (!tree.nodes || !tree.root) {
+          showError('Invalid tree format. Must have "nodes" and "root" properties');
+          return;
         }
 
-        function formatJSON() {
-            const input = document.getElementById('jsonInput').value;
-            const errorDiv = document.getElementById('error');
-            errorDiv.style.display = 'none';
+        calculateLayout();
+        draw();
+      } catch (e) {
+        showError('Invalid JSON: ' + e.message);
+      }
+    }
 
-            if (!input.trim()) {
-                errorDiv.textContent = 'Please paste JSON to format';
-                errorDiv.style.display = 'block';
-                return;
-            }
+    function calculateLayout() {
+      nodePositions = {};
+      const levels = {};
+      const levelHeights = {};
 
-            try {
-                const parsed = JSON.parse(input);
-                document.getElementById('jsonInput').value = JSON.stringify(parsed, null, 2);
-            } catch (e) {
-                errorDiv.textContent = 'Invalid JSON: ' + e.message;
-                errorDiv.style.display = 'block';
-            }
+      function assignLevels(nodeId, level = 0) {
+        if (!levels[level]) {
+          levels[level] = [];
+          levelHeights[level] = 0;
         }
+        levels[level].push(nodeId);
+        levelHeights[level]++;
 
-        function renderGraph() {
-            const input = document.getElementById('jsonInput').value;
-            const errorDiv = document.getElementById('error');
-            errorDiv.style.display = 'none';
-
-            if (!input.trim()) {
-                errorDiv.textContent = 'Please paste a graph JSON';
-                errorDiv.style.display = 'block';
-                return;
-            }
-
-            let graphData;
-            try {
-                graphData = JSON.parse(input);
-            } catch (e) {
-                errorDiv.textContent = 'Invalid JSON: ' + e.message;
-                errorDiv.style.display = 'block';
-                return;
-            }
-
-            // Clear previous graph
-            d3.select('#graph').html('');
-
-            // Convert graph data to D3 format
-            const nodes = [];
-            const links = [];
-            const nodeSet = new Set();
-
-            // Add all internal nodes
-            if (graphData.nodes) {
-                Object.entries(graphData.nodes).forEach(([key, node]) => {
-                    if (!nodeSet.has(key)) {
-                        nodes.push({ id: key, label: node.name, type: 'internal' });
-                        nodeSet.add(key);
-                    }
-
-                    // Add internal edges
-                    if (node.edges) {
-                        node.edges.forEach(edge => {
-                            if (!nodeSet.has(edge.to)) {
-                                // Check if this target exists in nodes map
-                                const targetNode = graphData.nodes[edge.to];
-                                const targetLabel = targetNode ? targetNode.name : edge.to;
-                                nodes.push({ id: edge.to, label: targetLabel, type: 'internal' });
-                                nodeSet.add(edge.to);
-                            }
-                            links.push({
-                                source: key,
-                                target: edge.to,
-                                label: edge.name,
-                                external: false
-                            });
-                        });
-                    }
-                });
-            }
-
-            // Add external edges
-            if (graphData.external) {
-                Object.entries(graphData.external).forEach(([from, edges]) => {
-                    if (!nodeSet.has(from)) {
-                        nodes.push({ id: from, type: 'external' });
-                        nodeSet.add(from);
-                    }
-
-                    edges.forEach(edge => {
-                        if (!nodeSet.has(edge.to)) {
-                            nodes.push({ id: edge.to, type: 'external' });
-                            nodeSet.add(edge.to);
-                        }
-                        links.push({
-                            source: from,
-                            target: edge.to,
-                            label: edge.name,
-                            external: true
-                        });
-                    });
-                });
-            }
-
-            // Create SVG
-            const svg = d3.select('#graph')
-                .append('svg')
-                .attr('width', width)
-                .attr('height', height);
-
-            // Define arrow markers
-            svg.append('defs').selectAll('marker')
-                .data(['arrow', 'arrow-external'])
-                .join('marker')
-                .attr('id', d => d)
-                .attr('viewBox', '0 -5 10 10')
-                .attr('refX', 25)
-                .attr('refY', 0)
-                .attr('markerWidth', 6)
-                .attr('markerHeight', 6)
-                .attr('orient', 'auto')
-                .append('path')
-                .attr('d', 'M0,-5L10,0L0,5')
-                .attr('class', d => d === 'arrow-external' ? 'arrow external' : 'arrow');
-
-            // Create force simulation with better untangling
-            const simulation = d3.forceSimulation(nodes)
-                .force('link', d3.forceLink(links).id(d => d.id).distance(200).strength(1))
-                .force('charge', d3.forceManyBody().strength(-1000).distanceMax(500))
-                .force('center', d3.forceCenter(width / 2, height / 2))
-                .force('collision', d3.forceCollide().radius(50))
-                .force('x', d3.forceX(width / 2).strength(0.05))
-                .force('y', d3.forceY(height / 2).strength(0.05))
-                .alphaDecay(0.01)
-                .velocityDecay(0.3);
-
-            // Create links
-            const link = svg.append('g')
-                .selectAll('path')
-                .data(links)
-                .join('path')
-                .attr('class', d => d.external ? 'link external' : 'link')
-                .attr('marker-end', d => d.external ? 'url(#arrow-external)' : 'url(#arrow)');
-
-            // Create link labels
-            const linkLabel = svg.append('g')
-                .selectAll('text')
-                .data(links.filter(d => d.label))
-                .join('text')
-                .attr('class', 'link-label')
-                .text(d => d.label);
-
-            // Create nodes
-            const node = svg.append('g')
-                .selectAll('g')
-                .data(nodes)
-                .join('g')
-                .attr('class', 'node')
-                .call(d3.drag()
-                    .on('start', dragstarted)
-                    .on('drag', dragged)
-                    .on('end', dragended));
-
-            node.append('circle')
-                .attr('r', 20)
-                .attr('fill', d => d.type === 'external' ? '#ff6b6b' : '#667eea');
-
-            node.append('text')
-                .attr('dy', 35)
-                .attr('text-anchor', 'middle')
-                .text(d => d.label || d.id);
-
-            // Update positions on tick
-            simulation.on('tick', () => {
-                link.attr('d', d => {
-                    const dx = d.target.x - d.source.x;
-                    const dy = d.target.y - d.source.y;
-                    const dr = Math.sqrt(dx * dx + dy * dy);
-                    return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
-                });
-
-                linkLabel
-                    .attr('x', d => (d.source.x + d.target.x) / 2)
-                    .attr('y', d => (d.source.y + d.target.y) / 2);
-
-                node.attr('transform', d => `translate(${d.x},${d.y})`);
-            });
-
-            function dragstarted(event) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
-            }
-
-            function dragged(event) {
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
-            }
-
-            function dragended(event) {
-                if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
-            }
+        const node = tree.nodes[nodeId];
+        if (node && node.children) {
+          node.children.forEach(child => {
+            assignLevels(child.to, level + 1);
+          });
         }
+      }
 
-        // Example graph on load
-        const exampleGraph = {
-            "nodes": {
-                "A": {
-                    "name": "A",
-                    "edges": [
-                        {"to": "B", "name": "connects"},
-                        {"to": "C", "name": "links"}
-                    ]
-                },
-                "B": {
-                    "name": "B",
-                    "edges": [
-                        {"to": "D", "name": "flows"}
-                    ]
-                },
-                "C": {
-                    "name": "C",
-                    "edges": [
-                        {"to": "D", "name": "points"}
-                    ]
-                },
-                "D": {
-                    "name": "D",
-                    "edges": []
-                }
-            },
-            "external": {
-                "E": [
-                    {"to": "A", "name": "external"}
-                ]
-            }
-        };
-    </script>
-    <script>
-        // Initialize on load
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initializeGraph);
-        } else {
-            initializeGraph();
+      assignLevels(tree.root);
+
+      const maxHeight = Math.max(...Object.values(levelHeights));
+      const totalHeight = maxHeight * VERTICAL_SPACING;
+      const totalWidth = Object.keys(levels).length * (NODE_WIDTH + HORIZONTAL_SPACING);
+
+      canvas.width = Math.max(totalWidth + PADDING * 2, 1000);
+      canvas.height = Math.max(totalHeight + PADDING * 2, 600);
+
+      Object.keys(levels).forEach(level => {
+        const nodesAtLevel = levels[level];
+        const levelHeight = nodesAtLevel.length * VERTICAL_SPACING;
+        const startY = (canvas.height - levelHeight) / 2 + VERTICAL_SPACING / 2;
+
+        nodesAtLevel.forEach((nodeId, index) => {
+          nodePositions[nodeId] = {
+            x: PADDING + parseInt(level) * (NODE_WIDTH + HORIZONTAL_SPACING),
+            y: startY + index * VERTICAL_SPACING
+          };
+        });
+      });
+    }
+
+    function draw() {
+      // Clear with gradient background
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, '#f8f9fa');
+      gradient.addColorStop(1, '#e9ecef');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw grid
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Draw edges
+      Object.keys(tree.nodes).forEach(nodeId => {
+        const node = tree.nodes[nodeId];
+        if (node.children) {
+          node.children.forEach(edge => {
+            drawEdge(nodeId, edge.to, edge.name);
+          });
         }
-    </script>
+      });
+
+      // Draw nodes
+      Object.keys(nodePositions).forEach(nodeId => {
+        drawNode(nodeId);
+      });
+    }
+
+    function drawEdge(fromId, toId, edgeName) {
+      const from = nodePositions[fromId];
+      const to = nodePositions[toId];
+
+      if (!from || !to) return;
+
+      const startX = from.x + NODE_WIDTH;
+      const startY = from.y + NODE_HEIGHT / 2;
+      const endX = to.x;
+      const endY = to.y + NODE_HEIGHT / 2;
+
+      // Draw glow effect
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = 'rgba(102, 126, 234, 0.3)';
+
+      // Draw curved line
+      const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+
+      const controlX = startX + (endX - startX) / 2;
+      ctx.bezierCurveTo(controlX, startY, controlX, endY, endX, endY);
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+
+      // Draw arrow
+      const arrowSize = 10;
+      ctx.fillStyle = '#764ba2';
+      ctx.beginPath();
+      ctx.moveTo(endX, endY);
+      ctx.lineTo(endX - arrowSize, endY - arrowSize / 2);
+      ctx.lineTo(endX - arrowSize, endY + arrowSize / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // Draw edge label
+      if (edgeName) {
+        const midX = startX + (endX - startX) / 2;
+        const midY = startY + (endY - startY) / 2;
+
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const textWidth = ctx.measureText(edgeName).width;
+
+        // Draw pill background
+        const pillPadding = 6;
+        const pillHeight = 20;
+        ctx.fillStyle = 'rgba(126, 34, 206, 0.95)';
+        ctx.beginPath();
+        ctx.roundRect(midX - textWidth / 2 - pillPadding, midY - pillHeight / 2, textWidth + pillPadding * 2, pillHeight, 10);
+        ctx.fill();
+
+        ctx.fillStyle = 'white';
+        ctx.fillText(edgeName, midX, midY);
+      }
+    }
+
+    function drawNode(nodeId) {
+      const pos = nodePositions[nodeId];
+      if (!pos) return;
+
+      const node = tree.nodes[nodeId];
+      const isRoot = nodeId === tree.root;
+
+      // Draw shadow
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+      ctx.shadowOffsetY = 4;
+
+      // Draw rounded rectangle with gradient
+      const radius = 12;
+      const gradient = ctx.createLinearGradient(pos.x, pos.y, pos.x, pos.y + NODE_HEIGHT);
+      if (isRoot) {
+        gradient.addColorStop(0, '#7e22ce');
+        gradient.addColorStop(1, '#6b21a8');
+      } else {
+        gradient.addColorStop(0, '#667eea');
+        gradient.addColorStop(1, '#5568d3');
+      }
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.roundRect(pos.x, pos.y, NODE_WIDTH, NODE_HEIGHT, radius);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+
+      // Draw border
+      ctx.strokeStyle = isRoot ? '#6b21a8' : '#5568d3';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Draw node name
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 15px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      const text = node.name || nodeId;
+      ctx.fillText(text, pos.x + NODE_WIDTH / 2, pos.y + 12);
+
+      // Draw data
+      if (node.data && Object.keys(node.data).length > 0) {
+        ctx.font = '11px Arial';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        let dataY = pos.y + 36;
+
+        Object.entries(node.data).forEach(([key, value]) => {
+          const dataText = `${key}: ${value}`;
+          ctx.fillText(dataText, pos.x + NODE_WIDTH / 2, dataY);
+          dataY += 15;
+        });
+      }
+    }
+
+    // Initialize
+    Initialize();
+  </script>
 </body>
+
 </html>
