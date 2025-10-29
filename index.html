@@ -347,12 +347,13 @@
         <label for="jsonInput">Tree JSON Data:</label>
         <textarea id="jsonInput"
           placeholder='{"nodes": {"root": {"name": "Root", "data": {}, ...}}, "root": "root"}'></textarea>
-        <div class="info">Paste the JSON output from your tree.ToJSON() method or use ?data=base64 URL parameter. Use mouse wheel + Ctrl to zoom, drag to pan</div>
+        <div class="info">Paste the JSON output from your tree.ToJSON() method or use ?data=base64 URL parameter. Graph will auto-fit to screen on load. Use mouse wheel + Ctrl to zoom, drag to pan</div>
       </div>
 
       <div class="button-group">
         <button onclick="visualize()">✨ Visualize Tree</button>
         <button class="secondary" onclick="formatJSON()">📝 Format JSON</button>
+        <button class="secondary" onclick="fitToContent()">🔍 Fit to Screen</button>
         <button class="secondary" onclick="resetView()">🔄 Reset View</button>
       </div>
 
@@ -513,6 +514,58 @@
         updateEdgeIndicators();
         draw();
       }
+    }
+
+    function fitToContent() {
+      if (!tree || !contentBounds) return;
+      
+      const wrapperWidth = wrapper.offsetWidth;
+      const wrapperHeight = wrapper.offsetHeight;
+      
+      // Calculate content dimensions
+      const contentWidth = contentBounds.maxX - contentBounds.minX;
+      const contentHeight = contentBounds.maxY - contentBounds.minY;
+      
+      // Add padding around content
+      const paddingFactor = 1.1; // 10% padding
+      const targetWidth = contentWidth * paddingFactor;
+      const targetHeight = contentHeight * paddingFactor;
+      
+      // Calculate scale to fit content
+      const scaleX = wrapperWidth / targetWidth;
+      const scaleY = wrapperHeight / targetHeight;
+      let newScale = Math.min(scaleX, scaleY);
+      
+      // Clamp scale to allowed range
+      newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+      
+      // If content is too large even at minimum scale, prioritize showing the root
+      if (newScale === MIN_SCALE && tree.root && nodePositions[tree.root]) {
+        scale = MIN_SCALE;
+        
+        // Center on root node
+        const rootPos = nodePositions[tree.root];
+        const rootCenterX = rootPos.x + rootPos.width / 2;
+        const rootCenterY = rootPos.y + rootPos.height / 2;
+        
+        offsetX = wrapperWidth / 2 - rootCenterX * scale;
+        offsetY = wrapperHeight / 2 - rootCenterY * scale;
+      } else {
+        // Fit entire content
+        scale = newScale;
+        
+        // Center the content
+        const contentCenterX = (contentBounds.minX + contentBounds.maxX) / 2;
+        const contentCenterY = (contentBounds.minY + contentBounds.maxY) / 2;
+        
+        offsetX = wrapperWidth / 2 - contentCenterX * scale;
+        offsetY = wrapperHeight / 2 - contentCenterY * scale;
+      }
+      
+      updateZoomDisplay();
+      constrainPosition();
+      updateEdgeIndicators();
+      draw();
     }
 
     // Mouse wheel zoom
@@ -771,8 +824,7 @@
 
         expandedNodes.clear();
         calculateLayout();
-        constrainPosition();
-        updateEdgeIndicators();
+        fitToContent(); // Auto-fit to show entire graph or center on root
         draw();
       } catch (e) {
         showError('Invalid JSON: ' + e.message);
