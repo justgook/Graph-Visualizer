@@ -178,14 +178,117 @@
       border-radius: 16px;
       padding: 25px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-      overflow: auto;
       border: 1px solid rgba(255, 255, 255, 0.3);
+      position: relative;
     }
 
-    #canvas {
+    .canvas-wrapper {
+      position: relative;
+      overflow: hidden;
       border: 2px solid #f0f0f0;
       border-radius: 12px;
       background: #fafafa;
+      cursor: grab;
+      height: 600px;
+    }
+
+    .canvas-wrapper:active {
+      cursor: grabbing;
+    }
+
+    #canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .controls {
+      position: absolute;
+      top: 35px;
+      right: 35px;
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      z-index: 10;
+    }
+
+    .control-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      min-width: auto;
+      border-radius: 6px;
+    }
+
+    .zoom-level {
+      padding: 8px 12px;
+      background: rgba(126, 34, 206, 0.1);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #7e22ce;
+      display: flex;
+      align-items: center;
+    }
+
+    .edge-indicators {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .indicator {
+      position: absolute;
+      background: rgba(126, 34, 206, 0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .indicator.visible {
+      display: flex;
+    }
+
+    .indicator.top {
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .indicator.bottom {
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .indicator.left {
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .indicator.right {
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
     }
 
     .error {
@@ -244,33 +347,68 @@
         <label for="jsonInput">Tree JSON Data:</label>
         <textarea id="jsonInput"
           placeholder='{"nodes": {"root": {"name": "Root", "data": {}, ...}}, "root": "root"}'></textarea>
-        <div class="info">Paste the JSON output from your tree.ToJSON() method or use ?data=base64 URL parameter</div>
+        <div class="info">Paste the JSON output from your tree.ToJSON() method or use ?data=base64 URL parameter. Use mouse wheel + Ctrl to zoom, drag to pan</div>
       </div>
 
       <div class="button-group">
         <button onclick="visualize()">✨ Visualize Tree</button>
         <button class="secondary" onclick="formatJSON()">📝 Format JSON</button>
+        <button class="secondary" onclick="resetView()">🔄 Reset View</button>
       </div>
 
       <div id="error" class="error"></div>
     </div>
 
     <div class="canvas-container">
-      <canvas id="canvas"></canvas>
+      <div class="controls">
+        <button class="control-btn" onclick="zoomIn()" title="Zoom In">+</button>
+        <button class="control-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+        <div class="zoom-level" id="zoomLevel">100%</div>
+      </div>
+      <div class="canvas-wrapper" id="canvasWrapper">
+        <canvas id="canvas"></canvas>
+        <div class="edge-indicators">
+          <div class="indicator top" id="indicatorTop">↑ Content above</div>
+          <div class="indicator bottom" id="indicatorBottom">↓ Content below</div>
+          <div class="indicator left" id="indicatorLeft">← Content left</div>
+          <div class="indicator right" id="indicatorRight">→ Content right</div>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('canvasWrapper');
     let tree = null;
     let nodePositions = {};
+    let nodeSizes = {};
+    let nodeSpacingRequirements = {};
+    let edgeLabelBounds = []; // Track edge label positions to prevent overlap
+    let expandedNodes = new Set();
+    let contentBounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
-    const NODE_WIDTH = 180;
-    const NODE_HEIGHT = 90;
-    const HORIZONTAL_SPACING = 100;
-    const VERTICAL_SPACING = 140;
-    const PADDING = 80;
+    // Transform state
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+
+    const NODE_MIN_WIDTH = 200;
+    const NODE_PADDING = 16;
+    const HORIZONTAL_SPACING = 150;
+    const VERTICAL_SPACING = 50;
+    const MIN_VERTICAL_SPACING = 50;
+    const PADDING = 100;
+    const LINE_HEIGHT = 18;
+    const MAX_VISIBLE_DATA = 3;
+    const GRID_SIZE = 40;
+    const MIN_SCALE = 0.2;
+    const MAX_SCALE = 3;
+    const EDGE_LABEL_PADDING = 10;
 
     function showError(message) {
       const errorDiv = document.getElementById('error');
@@ -282,39 +420,293 @@
       document.getElementById('error').style.display = 'none';
     }
 
+    function updateZoomDisplay() {
+      document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
+    }
+
+    function constrainPosition() {
+      if (!tree) return;
+
+      const wrapperWidth = wrapper.offsetWidth;
+      const wrapperHeight = wrapper.offsetHeight;
+      const contentWidth = canvas.width * scale;
+      const contentHeight = canvas.height * scale;
+
+      const minVisibleWidth = Math.min(wrapperWidth * 0.3, contentWidth);
+      const minVisibleHeight = Math.min(wrapperHeight * 0.3, contentHeight);
+
+      const maxOffsetX = wrapperWidth - minVisibleWidth;
+      const minOffsetX = -(contentWidth - minVisibleWidth);
+      const maxOffsetY = wrapperHeight - minVisibleHeight;
+      const minOffsetY = -(contentHeight - minVisibleHeight);
+
+      offsetX = Math.max(minOffsetX, Math.min(maxOffsetX, offsetX));
+      offsetY = Math.max(minOffsetY, Math.min(maxOffsetY, offsetY));
+    }
+
+    function updateEdgeIndicators() {
+      if (!tree) return;
+
+      const wrapperWidth = wrapper.offsetWidth;
+      const wrapperHeight = wrapper.offsetHeight;
+
+      const indicatorTop = document.getElementById('indicatorTop');
+      const indicatorBottom = document.getElementById('indicatorBottom');
+      const indicatorLeft = document.getElementById('indicatorLeft');
+      const indicatorRight = document.getElementById('indicatorRight');
+
+      const threshold = 5; // Pixels of tolerance
+
+      // Calculate actual content bounds in screen space
+      const contentLeft = contentBounds.minX * scale + offsetX;
+      const contentRight = contentBounds.maxX * scale + offsetX;
+      const contentTop = contentBounds.minY * scale + offsetY;
+      const contentBottom = contentBounds.maxY * scale + offsetY;
+
+      // Content is above viewport when top of content is above viewport
+      indicatorTop.classList.toggle('visible', contentTop < -threshold);
+      // Content is below viewport when bottom of content is below viewport
+      indicatorBottom.classList.toggle('visible', contentBottom > wrapperHeight + threshold);
+      // Content is to the left when left of content is left of viewport
+      indicatorLeft.classList.toggle('visible', contentLeft < -threshold);
+      // Content is to the right when right of content is right of viewport
+      indicatorRight.classList.toggle('visible', contentRight > wrapperWidth + threshold);
+    }
+
+    function zoomIn() {
+      const centerX = wrapper.offsetWidth / 2;
+      const centerY = wrapper.offsetHeight / 2;
+      zoom(centerX, centerY, 1.2);
+    }
+
+    function zoomOut() {
+      const centerX = wrapper.offsetWidth / 2;
+      const centerY = wrapper.offsetHeight / 2;
+      zoom(centerX, centerY, 0.8);
+    }
+
+    function zoom(x, y, factor) {
+      const oldScale = scale;
+      scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
+      
+      const scaleChange = scale - oldScale;
+      const relX = (x - offsetX) / oldScale;
+      const relY = (y - offsetY) / oldScale;
+      
+      offsetX -= relX * scaleChange;
+      offsetY -= relY * scaleChange;
+      
+      constrainPosition();
+      updateZoomDisplay();
+      updateEdgeIndicators();
+      draw();
+    }
+
+    function resetView() {
+      scale = 1;
+      offsetX = 0;
+      offsetY = 0;
+      updateZoomDisplay();
+      if (tree) {
+        calculateLayout();
+        constrainPosition();
+        updateEdgeIndicators();
+        draw();
+      }
+    }
+
+    // Mouse wheel zoom
+    wrapper.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = wrapper.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      if (e.ctrlKey || e.metaKey) {
+        const factor = e.deltaY < 0 ? 1.1 : 0.9;
+        zoom(x, y, factor);
+      } else {
+        offsetX -= e.deltaX;
+        offsetY -= e.deltaY;
+        constrainPosition();
+        updateEdgeIndicators();
+        draw();
+      }
+    }, { passive: false });
+
+    // Mouse drag
+    wrapper.addEventListener('mousedown', (e) => {
+      const rect = wrapper.getBoundingClientRect();
+      const x = (e.clientX - rect.left - offsetX) / scale;
+      const y = (e.clientY - rect.top - offsetY) / scale;
+      
+      const clicked = checkExpandButtonClick(x, y);
+      if (clicked) {
+        return;
+      }
+      
+      isDragging = true;
+      dragStartX = e.clientX - offsetX;
+      dragStartY = e.clientY - offsetY;
+    });
+
+    wrapper.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        offsetX = e.clientX - dragStartX;
+        offsetY = e.clientY - dragStartY;
+        constrainPosition();
+        updateEdgeIndicators();
+        draw();
+      }
+    });
+
+    wrapper.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    wrapper.addEventListener('mouseleave', () => {
+      isDragging = false;
+    });
+
+    // Resize handler
+    window.addEventListener('resize', () => {
+      if (tree) {
+        calculateLayout();
+        constrainPosition();
+        updateEdgeIndicators();
+        draw();
+      }
+    });
+
+    function checkExpandButtonClick(x, y) {
+      for (const [nodeId, pos] of Object.entries(nodePositions)) {
+        const node = tree.nodes[nodeId];
+        if (!node.data || Object.keys(node.data).length <= MAX_VISIBLE_DATA) continue;
+        
+        const buttonY = pos.y + pos.height - NODE_PADDING - 26;
+        const buttonX = pos.x + NODE_PADDING;
+        const buttonWidth = pos.width - NODE_PADDING * 2;
+        const buttonHeight = 26;
+        
+        if (x >= buttonX && x <= buttonX + buttonWidth &&
+            y >= buttonY && y <= buttonY + buttonHeight) {
+          if (expandedNodes.has(nodeId)) {
+            expandedNodes.delete(nodeId);
+          } else {
+            expandedNodes.add(nodeId);
+          }
+          calculateLayout();
+          constrainPosition();
+          updateEdgeIndicators();
+          draw();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function wrapText(text, maxWidth) {
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = words[0];
+
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        const width = ctx.measureText(currentLine + ' ' + word).width;
+        if (width < maxWidth) {
+          currentLine += ' ' + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      lines.push(currentLine);
+      return lines;
+    }
+
+    function calculateEdgeLabelSize(edgeName) {
+      if (!edgeName) return { width: 0, height: 0 };
+      
+      ctx.font = 'bold 12px Arial';
+      
+      // Estimate max label width as a portion of typical edge length
+      const maxLabelWidth = HORIZONTAL_SPACING * 0.5;
+      const lines = wrapText(edgeName, maxLabelWidth);
+      const lineHeight = 16;
+      
+      const textWidths = lines.map(line => ctx.measureText(line).width);
+      const maxTextWidth = Math.max(...textWidths);
+      const pillPadding = 8;
+      
+      return {
+        width: maxTextWidth + pillPadding * 2,
+        height: lines.length * lineHeight + pillPadding * 2
+      };
+    }
+
+    function calculateNodeSize(nodeId) {
+      const node = tree.nodes[nodeId];
+      ctx.font = 'bold 15px Arial';
+      const nameWidth = ctx.measureText(node.name || nodeId).width;
+      
+      let maxWidth = Math.max(NODE_MIN_WIDTH, nameWidth + NODE_PADDING * 2);
+      let height = NODE_PADDING * 2 + 20;
+      
+      if (node.data && Object.keys(node.data).length > 0) {
+        ctx.font = '12px Arial';
+        const dataEntries = Object.entries(node.data);
+        const isExpanded = expandedNodes.has(nodeId);
+        const visibleCount = isExpanded ? dataEntries.length : Math.min(MAX_VISIBLE_DATA, dataEntries.length);
+        
+        dataEntries.slice(0, visibleCount).forEach(([key, value]) => {
+          const text = `${key}: ${value}`;
+          const textWidth = ctx.measureText(text).width;
+          maxWidth = Math.max(maxWidth, textWidth + NODE_PADDING * 3);
+        });
+        
+        height += LINE_HEIGHT * visibleCount + 8;
+        
+        if (dataEntries.length > MAX_VISIBLE_DATA) {
+          height += 34;
+        }
+      }
+      
+      return { width: maxWidth, height };
+    }
+
     function loadExample() {
       const example = {
         "nodes": {
           "root": {
             "name": "Tutorial",
-            "data": {"difficulty": "easy", "type": "intro"},
+            "data": {"difficulty": "easy", "type": "intro", "time": "5min"},
             "children": [
-              {"to": "level1", "name": "Next"},
-              {"to": "bonus1", "name": "Secret"}
+              {"to": "level1", "name": "Next Level"},
+              {"to": "bonus1", "name": "Secret Path"}
             ]
           },
           "level1": {
             "name": "Forest Path",
-            "data": {"difficulty": "medium", "enemies": "3"},
+            "data": {"difficulty": "medium", "enemies": "3", "collectibles": "5", "hazards": "spikes", "weather": "rain"},
             "parent": "root",
             "children": [
-              {"to": "level2a", "name": "Main"},
-              {"to": "level2b", "name": "Alt"}
+              {"to": "level2a", "name": "Main Route"},
+              {"to": "level2b", "name": "Alternate Path"}
             ]
           },
           "bonus1": {
             "name": "Hidden Cave",
-            "data": {"difficulty": "hard", "reward": "sword"},
+            "data": {"difficulty": "hard", "reward": "legendary sword", "hidden": "true"},
             "parent": "root"
           },
           "level2a": {
             "name": "Mountain Pass",
-            "data": {"difficulty": "hard", "boss": "true"},
+            "data": {"difficulty": "hard", "boss": "Dragon", "checkpoint": "yes"},
             "parent": "level1"
           },
           "level2b": {
             "name": "River Valley",
-            "data": {"difficulty": "medium", "puzzle": "true"},
+            "data": {"difficulty": "medium", "puzzle": "bridge"},
             "parent": "level1"
           }
         },
@@ -377,7 +769,10 @@
           return;
         }
 
+        expandedNodes.clear();
         calculateLayout();
+        constrainPosition();
+        updateEdgeIndicators();
         draw();
       } catch (e) {
         showError('Invalid JSON: ' + e.message);
@@ -387,15 +782,32 @@
     function calculateLayout() {
       nodePositions = {};
       const levels = {};
-      const levelHeights = {};
+      const nodeSizes = {};
+      const edgeLabelSizes = {};
+
+      function calculateSizes(nodeId) {
+        if (nodeSizes[nodeId]) return;
+        const size = calculateNodeSize(nodeId);
+        nodeSizes[nodeId] = size;
+        
+        const node = tree.nodes[nodeId];
+        if (node && node.children) {
+          node.children.forEach(child => {
+            calculateSizes(child.to);
+            // Calculate edge label size
+            if (child.name) {
+              const labelSize = calculateEdgeLabelSize(child.name);
+              edgeLabelSizes[`${nodeId}-${child.to}`] = labelSize;
+            }
+          });
+        }
+      }
 
       function assignLevels(nodeId, level = 0) {
         if (!levels[level]) {
           levels[level] = [];
-          levelHeights[level] = 0;
         }
         levels[level].push(nodeId);
-        levelHeights[level]++;
 
         const node = tree.nodes[nodeId];
         if (node && node.children) {
@@ -405,52 +817,253 @@
         }
       }
 
+      calculateSizes(tree.root);
       assignLevels(tree.root);
 
-      const maxHeight = Math.max(...Object.values(levelHeights));
-      const totalHeight = maxHeight * VERTICAL_SPACING;
-      const totalWidth = Object.keys(levels).length * (NODE_WIDTH + HORIZONTAL_SPACING);
-
-      canvas.width = Math.max(totalWidth + PADDING * 2, 1000);
-      canvas.height = Math.max(totalHeight + PADDING * 2, 600);
-
+      // Calculate spacing requirements per node pair
+      const nodeSpacingRequirements = {};
       Object.keys(levels).forEach(level => {
         const nodesAtLevel = levels[level];
-        const levelHeight = nodesAtLevel.length * VERTICAL_SPACING;
-        const startY = (canvas.height - levelHeight) / 2 + VERTICAL_SPACING / 2;
-
         nodesAtLevel.forEach((nodeId, index) => {
+          if (index === nodesAtLevel.length - 1) return;
+          
+          const nextNodeId = nodesAtLevel[index + 1];
+          let maxLabelHeight = 0;
+          
+          // Check all edges from current node
+          const node = tree.nodes[nodeId];
+          if (node && node.children) {
+            node.children.forEach(child => {
+              const labelSize = edgeLabelSizes[`${nodeId}-${child.to}`];
+              if (labelSize) {
+                maxLabelHeight = Math.max(maxLabelHeight, labelSize.height);
+              }
+            });
+          }
+          
+          // Check all edges from next node
+          const nextNode = tree.nodes[nextNodeId];
+          if (nextNode && nextNode.children) {
+            nextNode.children.forEach(child => {
+              const labelSize = edgeLabelSizes[`${nextNodeId}-${child.to}`];
+              if (labelSize) {
+                maxLabelHeight = Math.max(maxLabelHeight, labelSize.height);
+              }
+            });
+          }
+          
+          // Also check edges coming INTO current and next nodes from previous level
+          if (parseInt(level) > 0) {
+            const prevLevel = (parseInt(level) - 1).toString();
+            if (levels[prevLevel]) {
+              levels[prevLevel].forEach(prevNodeId => {
+                const prevNode = tree.nodes[prevNodeId];
+                if (prevNode && prevNode.children) {
+                  prevNode.children.forEach(child => {
+                    if (child.to === nodeId || child.to === nextNodeId) {
+                      const labelSize = edgeLabelSizes[`${prevNodeId}-${child.to}`];
+                      if (labelSize) {
+                        maxLabelHeight = Math.max(maxLabelHeight, labelSize.height);
+                      }
+                    }
+                  });
+                }
+              });
+            }
+          }
+          
+          nodeSpacingRequirements[`${nodeId}-${nextNodeId}`] = maxLabelHeight;
+        });
+      });
+
+      let totalHeight = PADDING * 2;
+      Object.keys(levels).forEach(level => {
+        const nodesAtLevel = levels[level];
+        let levelHeight = 0;
+        
+        nodesAtLevel.forEach((nodeId, index) => {
+          levelHeight += nodeSizes[nodeId].height;
+          
+          if (index < nodesAtLevel.length - 1) {
+            const nextNodeId = nodesAtLevel[index + 1];
+            const requiredSpace = nodeSpacingRequirements[`${nodeId}-${nextNodeId}`] || 0;
+            const spacing = Math.max(MIN_VERTICAL_SPACING, requiredSpace + EDGE_LABEL_PADDING * 2);
+            levelHeight += spacing;
+          }
+        });
+        
+        totalHeight = Math.max(totalHeight, levelHeight);
+      });
+
+      let totalWidth = PADDING * 2;
+      Object.keys(levels).forEach(level => {
+        const maxWidth = Math.max(...levels[level].map(nodeId => nodeSizes[nodeId].width));
+        totalWidth += maxWidth + HORIZONTAL_SPACING;
+      });
+
+      const wrapperWidth = wrapper.offsetWidth;
+      const wrapperHeight = wrapper.offsetHeight;
+      canvas.width = Math.max(totalWidth, wrapperWidth);
+      canvas.height = Math.max(totalHeight, wrapperHeight);
+
+      // Calculate content bounding box
+      contentBounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+
+      // Position nodes with dynamic spacing per pair
+      Object.keys(levels).forEach((level, levelIndex) => {
+        const nodesAtLevel = levels[level];
+        
+        let levelHeight = 0;
+        nodesAtLevel.forEach((nodeId, index) => {
+          levelHeight += nodeSizes[nodeId].height;
+          
+          if (index < nodesAtLevel.length - 1) {
+            const nextNodeId = nodesAtLevel[index + 1];
+            const requiredSpace = nodeSpacingRequirements[`${nodeId}-${nextNodeId}`] || 0;
+            const spacing = Math.max(MIN_VERTICAL_SPACING, requiredSpace + EDGE_LABEL_PADDING * 2);
+            levelHeight += spacing;
+          }
+        });
+        
+        const startY = (canvas.height - levelHeight) / 2;
+
+        let currentX = PADDING;
+        for (let i = 0; i < levelIndex; i++) {
+          const prevLevelMaxWidth = Math.max(...levels[i].map(nodeId => nodeSizes[nodeId].width));
+          currentX += prevLevelMaxWidth + HORIZONTAL_SPACING;
+        }
+
+        let currentY = startY;
+        nodesAtLevel.forEach((nodeId, index) => {
+          const size = nodeSizes[nodeId];
           nodePositions[nodeId] = {
-            x: PADDING + parseInt(level) * (NODE_WIDTH + HORIZONTAL_SPACING),
-            y: startY + index * VERTICAL_SPACING
+            x: currentX,
+            y: currentY,
+            width: size.width,
+            height: size.height
           };
+          
+          // Update content bounds
+          contentBounds.minX = Math.min(contentBounds.minX, currentX);
+          contentBounds.minY = Math.min(contentBounds.minY, currentY);
+          contentBounds.maxX = Math.max(contentBounds.maxX, currentX + size.width);
+          contentBounds.maxY = Math.max(contentBounds.maxY, currentY + size.height);
+          
+          currentY += size.height;
+          
+          if (index < nodesAtLevel.length - 1) {
+            const nextNodeId = nodesAtLevel[index + 1];
+            const requiredSpace = nodeSpacingRequirements[`${nodeId}-${nextNodeId}`] || 0;
+            const spacing = Math.max(MIN_VERTICAL_SPACING, requiredSpace + EDGE_LABEL_PADDING * 2);
+            currentY += spacing;
+          }
         });
       });
     }
 
+    function drawGrid() {
+      const wrapperWidth = wrapper.offsetWidth;
+      const wrapperHeight = wrapper.offsetHeight;
+      
+      // Calculate visible area in canvas coordinates
+      const viewStartX = -offsetX / scale;
+      const viewStartY = -offsetY / scale;
+      const viewEndX = (wrapperWidth - offsetX) / scale;
+      const viewEndY = (wrapperHeight - offsetY) / scale;
+      
+      // Calculate grid offset to make it appear stationary
+      const gridOffsetX = viewStartX - (viewStartX % GRID_SIZE);
+      const gridOffsetY = viewStartY - (viewStartY % GRID_SIZE);
+      
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = 1 / scale;
+      
+      // Draw vertical lines
+      for (let x = gridOffsetX; x <= viewEndX; x += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(x, viewStartY);
+        ctx.lineTo(x, viewEndY);
+        ctx.stroke();
+      }
+      
+      // Draw horizontal lines
+      for (let y = gridOffsetY; y <= viewEndY; y += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(viewStartX, y);
+        ctx.lineTo(viewEndX, y);
+        ctx.stroke();
+      }
+    }
+
+    function checkLabelOverlap(bounds) {
+      // Check if a label overlaps with any existing labels
+      for (const existing of edgeLabelBounds) {
+        if (!(bounds.right < existing.left || 
+              bounds.left > existing.right || 
+              bounds.bottom < existing.top || 
+              bounds.top > existing.bottom)) {
+          return true; // Overlap detected
+        }
+      }
+      return false;
+    }
+
+    function findNonOverlappingPosition(midX, midY, width, height, startY, endY) {
+      // Try different vertical offsets to find a non-overlapping position
+      const offsets = [0, 20, -20, 40, -40, 60, -60, 80, -80];
+      
+      for (const offset of offsets) {
+        const testY = midY + offset;
+        const bounds = {
+          left: midX - width / 2,
+          right: midX + width / 2,
+          top: testY - height / 2,
+          bottom: testY + height / 2
+        };
+        
+        // Make sure the label stays within reasonable bounds of the edge
+        const edgeMinY = Math.min(startY, endY) - 100;
+        const edgeMaxY = Math.max(startY, endY) + 100;
+        
+        if (testY - height / 2 >= edgeMinY && 
+            testY + height / 2 <= edgeMaxY && 
+            !checkLabelOverlap(bounds)) {
+          return { x: midX, y: testY, bounds };
+        }
+      }
+      
+      // If no non-overlapping position found, return original with bounds
+      const bounds = {
+        left: midX - width / 2,
+        right: midX + width / 2,
+        top: midY - height / 2,
+        bottom: midY + height / 2
+      };
+      return { x: midX, y: midY, bounds };
+    }
+
     function draw() {
-      // Clear with gradient background
+      const wrapperWidth = wrapper.offsetWidth;
+      const wrapperHeight = wrapper.offsetHeight;
+      
+      // Reset edge label bounds for overlap detection
+      edgeLabelBounds = [];
+      
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      // Draw gradient background
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
       gradient.addColorStop(0, '#f8f9fa');
       gradient.addColorStop(1, '#e9ecef');
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(-offsetX / scale, -offsetY / scale, wrapperWidth / scale, wrapperHeight / scale);
 
       // Draw grid
-      ctx.strokeStyle = '#e0e0e0';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < canvas.width; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
+      drawGrid();
 
       // Draw edges
       Object.keys(tree.nodes).forEach(nodeId => {
@@ -466,6 +1079,8 @@
       Object.keys(nodePositions).forEach(nodeId => {
         drawNode(nodeId);
       });
+
+      ctx.restore();
     }
 
     function drawEdge(fromId, toId, edgeName) {
@@ -474,16 +1089,14 @@
 
       if (!from || !to) return;
 
-      const startX = from.x + NODE_WIDTH;
-      const startY = from.y + NODE_HEIGHT / 2;
+      const startX = from.x + from.width;
+      const startY = from.y + from.height / 2;
       const endX = to.x;
-      const endY = to.y + NODE_HEIGHT / 2;
+      const endY = to.y + to.height / 2;
 
-      // Draw glow effect
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 10 / scale;
       ctx.shadowColor = 'rgba(102, 126, 234, 0.3)';
 
-      // Draw curved line
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
       gradient.addColorStop(0, '#667eea');
       gradient.addColorStop(1, '#764ba2');
@@ -498,7 +1111,6 @@
 
       ctx.shadowBlur = 0;
 
-      // Draw arrow
       const arrowSize = 10;
       ctx.fillStyle = '#764ba2';
       ctx.beginPath();
@@ -508,7 +1120,6 @@
       ctx.closePath();
       ctx.fill();
 
-      // Draw edge label
       if (edgeName) {
         const midX = startX + (endX - startX) / 2;
         const midY = startY + (endY - startY) / 2;
@@ -517,18 +1128,37 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const textWidth = ctx.measureText(edgeName).width;
+        // Wrap text if needed
+        const maxLabelWidth = Math.abs(endX - startX) * 0.4;
+        const lines = wrapText(edgeName, maxLabelWidth);
+        const lineHeight = 16;
+        const totalTextHeight = lines.length * lineHeight;
 
-        // Draw pill background
-        const pillPadding = 6;
-        const pillHeight = 20;
+        const textWidths = lines.map(line => ctx.measureText(line).width);
+        const maxTextWidth = Math.max(...textWidths);
+        
+        const pillPadding = 8;
+        const pillHeight = totalTextHeight + pillPadding * 2;
+        const pillWidth = maxTextWidth + pillPadding * 2;
+        
+        // Find a non-overlapping position for this label
+        const position = findNonOverlappingPosition(midX, midY, pillWidth, pillHeight, startY, endY);
+        
+        // Store the bounds of this label
+        edgeLabelBounds.push(position.bounds);
+        
+        // Draw the label at the adjusted position
         ctx.fillStyle = 'rgba(126, 34, 206, 0.95)';
         ctx.beginPath();
-        ctx.roundRect(midX - textWidth / 2 - pillPadding, midY - pillHeight / 2, textWidth + pillPadding * 2, pillHeight, 10);
+        ctx.roundRect(position.x - pillWidth / 2, position.y - pillHeight / 2, 
+                      pillWidth, pillHeight, 11);
         ctx.fill();
 
         ctx.fillStyle = 'white';
-        ctx.fillText(edgeName, midX, midY);
+        const textStartY = position.y - (lines.length - 1) * lineHeight / 2;
+        lines.forEach((line, i) => {
+          ctx.fillText(line, position.x, textStartY + i * lineHeight);
+        });
       }
     }
 
@@ -539,14 +1169,12 @@
       const node = tree.nodes[nodeId];
       const isRoot = nodeId === tree.root;
 
-      // Draw shadow
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 15 / scale;
       ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
-      ctx.shadowOffsetY = 4;
+      ctx.shadowOffsetY = 4 / scale;
 
-      // Draw rounded rectangle with gradient
       const radius = 12;
-      const gradient = ctx.createLinearGradient(pos.x, pos.y, pos.x, pos.y + NODE_HEIGHT);
+      const gradient = ctx.createLinearGradient(pos.x, pos.y, pos.x, pos.y + pos.height);
       if (isRoot) {
         gradient.addColorStop(0, '#7e22ce');
         gradient.addColorStop(1, '#6b21a8');
@@ -557,41 +1185,65 @@
 
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.roundRect(pos.x, pos.y, NODE_WIDTH, NODE_HEIGHT, radius);
+      ctx.roundRect(pos.x, pos.y, pos.width, pos.height, radius);
       ctx.fill();
 
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
 
-      // Draw border
       ctx.strokeStyle = isRoot ? '#6b21a8' : '#5568d3';
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Draw node name
       ctx.fillStyle = 'white';
       ctx.font = 'bold 15px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
       const text = node.name || nodeId;
-      ctx.fillText(text, pos.x + NODE_WIDTH / 2, pos.y + 12);
+      ctx.fillText(text, pos.x + pos.width / 2, pos.y + NODE_PADDING);
 
-      // Draw data
       if (node.data && Object.keys(node.data).length > 0) {
-        ctx.font = '11px Arial';
+        ctx.font = '12px Arial';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-        let dataY = pos.y + 36;
+        ctx.textAlign = 'left';
+        let dataY = pos.y + NODE_PADDING + 30;
 
-        Object.entries(node.data).forEach(([key, value]) => {
+        const dataEntries = Object.entries(node.data);
+        const isExpanded = expandedNodes.has(nodeId);
+        const visibleCount = isExpanded ? dataEntries.length : Math.min(MAX_VISIBLE_DATA, dataEntries.length);
+
+        dataEntries.slice(0, visibleCount).forEach(([key, value]) => {
           const dataText = `${key}: ${value}`;
-          ctx.fillText(dataText, pos.x + NODE_WIDTH / 2, dataY);
-          dataY += 15;
+          ctx.fillText(dataText, pos.x + NODE_PADDING, dataY);
+          dataY += LINE_HEIGHT;
         });
+
+        if (dataEntries.length > MAX_VISIBLE_DATA) {
+          const buttonY = pos.y + pos.height - NODE_PADDING - 26;
+          const buttonText = isExpanded ? '▲ Show less' : `▼ Show ${dataEntries.length - MAX_VISIBLE_DATA} more`;
+          
+          // Draw button background with same styling as node
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+          const buttonRadius = 6;
+          ctx.beginPath();
+          ctx.roundRect(pos.x + NODE_PADDING, buttonY, pos.width - NODE_PADDING * 2, 26, buttonRadius);
+          ctx.fill();
+          
+          // Draw button border
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 11px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(buttonText, pos.x + pos.width / 2, buttonY + 13);
+        }
       }
     }
 
-    // Initialize
     Initialize();
   </script>
 </body>
